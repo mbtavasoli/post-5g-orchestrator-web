@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "post-5g-orchestrator-web-backend"
+version = "0.1.0"
+description = "Thin FastAPI backend for the Post-5G orchestrator"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.119,<1",
+    "pydantic==2.13.5",
+    "pydantic-core==2.46.5",
+    "pydantic-settings==2.15.0",
+    "uvicorn>=0.38,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28,<1",
+    "pytest>=8.4,<10",
+    "ruff>=0.14,<1",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
