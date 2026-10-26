@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Request, status
 
 from app import orchestrator_bridge as bridge
+from app.redaction import redact_data
 from app.schemas import (
     DeploymentMetadata,
     DeploymentResponse,
@@ -50,8 +51,8 @@ def create_deployment(body: DeploymentWrite, store: StoreDependency) -> Deployme
     metadata = store.create(body.name, metamodel, deployment_model)
     return DeploymentResponse(
         deployment=store.public_metadata(metadata),
-        metamodel=bridge.dump(metamodel),
-        deployment_model=bridge.dump(deployment_model),
+        metamodel=redact_data(bridge.dump(metamodel)),
+        deployment_model=redact_data(bridge.dump(deployment_model)),
     )
 
 
@@ -71,8 +72,8 @@ def get_deployment(deployment_id: str, store: StoreDependency) -> DeploymentResp
     metadata, metamodel, deployment_model = store.get(deployment_id)
     return DeploymentResponse(
         deployment=store.public_metadata(metadata),
-        metamodel=bridge.dump(metamodel),
-        deployment_model=bridge.dump(deployment_model),
+        metamodel=redact_data(bridge.dump(metamodel)),
+        deployment_model=redact_data(bridge.dump(deployment_model)),
     )
 
 
@@ -85,16 +86,28 @@ def replace_deployment(
     deployment_id: str,
     body: DeploymentWrite,
     store: StoreDependency,
+    request: Request,
 ) -> DeploymentResponse:
     """Validate and replace both stored models for a deployment."""
     store.require(deployment_id)
+    if request.app.state.jobs.is_active(deployment_id) or store.has_state(deployment_id):
+        # Rebuilding from new input would discard runtime state (installed components, IPs, ...).
+        raise bridge.BridgeError(
+            kind="conflict",
+            stage="input",
+            exception="RuntimeStateExists",
+            message="This deployment has already run actions; its input can no longer be replaced. "
+                    "Remove the deployed stages or create a new deployment.",
+            details=None,
+            status_code=409,
+        )
     metamodel = bridge.parse_metamodel(body.metamodel)
     deployment_model = bridge.parse_deployment_model(body.deployment_model)
     metadata = store.replace(deployment_id, body.name, metamodel, deployment_model)
     return DeploymentResponse(
         deployment=store.public_metadata(metadata),
-        metamodel=bridge.dump(metamodel),
-        deployment_model=bridge.dump(deployment_model),
+        metamodel=redact_data(bridge.dump(metamodel)),
+        deployment_model=redact_data(bridge.dump(deployment_model)),
     )
 
 
@@ -124,6 +137,6 @@ def reconcile_deployment(
     return ReconcileResponse(
         until=until,
         stages=stages,
-        metamodel=bridge.dump(reconciled_metamodel),
-        deployment_model=bridge.dump(reconciled_deployment_model),
+        metamodel=redact_data(bridge.dump(reconciled_metamodel)),
+        deployment_model=redact_data(bridge.dump(reconciled_deployment_model)),
     )

@@ -6,4 +6,7 @@ __pycache__/
 *.py[cod]
 backend/.venv/
 data/
-
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/

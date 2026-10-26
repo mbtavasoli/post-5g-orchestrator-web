@@ -1,0 +1,187 @@
+version: 1
+updated: "2026-10-23"
+sources:
+  r2lab_hardware: https://r2lab.inria.fr/hardware.md
+  orchestrator_examples: ../orchestrator/examples
+  sophianode_ssh: ../orchestrator/examples/r2lab/output_deployment_model.yaml
+
+# Static inventory only. Dynamic state (leases, reservation owner, power, provisioning)
+# is read live from R2Lab by the backend and is never stored here.
+# `ssh` reproduces the SSH paths recorded by the orchestrator for these servers.
+# `jumphost.user: null` with `user_from: slices_username` means the user's own SLICES username.
+
+slices:
+  sophianodes:
+    - id: sopnode-f1
+      available: true
+      r2lab_radio_capable: true
+      ssh_hostname: sopnode-f1
+      ssh:
+        hostname: sopnode-f1
+        jumphost: {hostname: duckburg.net.cit.tum.de, port: 10022, user: null, user_from: slices_username}
+    - id: sopnode-f2
+      available: true
+      r2lab_radio_capable: true
+      ssh_hostname: sopnode-f2
+      ssh:
+        hostname: sopnode-f2
+        jumphost: {hostname: duckburg.net.cit.tum.de, port: 10022, user: null, user_from: slices_username}
+    - id: sopnode-f3
+      available: true
+      r2lab_radio_capable: true
+    - id: sopnode-f4
+      available: true
+      r2lab_radio_capable: false
+      ssh_hostname: 172.28.2.96
+      ssh:
+        hostname: 172.28.2.96
+        jumphost: {hostname: bastion1.theblueprintfactory.org, port: null, user: proxy_for_pos}
+    - id: sopnode-w3
+      available: true
+      r2lab_radio_capable: true
+    - id: bm100
+      available: true
+      r2lab_radio_capable: false
+    - id: bm101
+      available: true
+      r2lab_radio_capable: false
+    - id: bm102
+      available: true
+      r2lab_radio_capable: false
+    - id: bm103
+      available: true
+      r2lab_radio_capable: false
+  bi:
+    provisioner_type: bi
+
+r2lab:
+  required_sophianodes:
+    - sopnode-f1
+    - sopnode-f2
+    - sopnode-f3
+    - sopnode-w3
+  radio_units:
+    - id: n300
+      label: N300
+      type: usrp
+      model: n300
+    - id: n320
+      label: N320
+      type: usrp
+      model: n320
+    - id: jaguar
+      label: Jaguar
+      type: aw2s
+      model: jaguar
+    - id: panther
+      label: Panther
+      type: aw2s
+      model: panther
+    - id: benetel1
+      label: Benetel 1
+      type: benetel
+      model: ran550
+    - id: benetel2
+      label: Benetel 2
+      type: benetel
+      model: ran550
+    - id: liteon
+      label: LITEON
+      type: liteon
+      model: flexfi
+  user_equipment:
+    - id: phone1
+      label: HUAWEI P40 Pro
+      model: HUAWEI P40 Pro
+      imsi: "001010000000001"
+      attached_to: macphone1
+    - id: phone2
+      label: Google Pixel 7
+      model: Google Pixel 7
+      imsi: "001010000000002"
+      attached_to: macphone2
+    - id: fit07
+      label: Quectel RM500Q-GL on fit07
+      model: Quectel RM500Q-GL
+      imsi: "001010000000003"
+      attached_to: fit07
+    - id: fit09
+      label: Quectel RM500Q-GL on fit09
+      model: Quectel RM500Q-GL
+      imsi: "001010000000004"
+      attached_to: fit09
+    - id: fit18
+      label: Quectel RM500Q-GL on fit18
+      model: Quectel RM500Q-GL
+      imsi: "001010000000005"
+      attached_to: fit18
+    - id: qhat01
+      label: Quectel RM500Q-GL qhat01
+      model: Quectel RM500Q-GL
+      imsi: "001010000000006"
+      attached_to: qhat01
+    - id: qhat02
+      label: Quectel RM500Q-GL qhat02
+      model: Quectel RM500Q-GL
+      imsi: "001010000000007"
+      attached_to: qhat02
+    - id: qhat03
+      label: Quectel RM500Q-GL qhat03
+      model: Quectel RM500Q-GL
+      imsi: "001010000000008"
+      attached_to: qhat03
+    - id: qhat20
+      label: Quectel RG255C-GL qhat20
+      model: Quectel RG255C-GL
+      imsi: "001010000000009"
+      attached_to: qhat20
+    - id: qhat21
+      label: Quectel RG255C-GL qhat21
+      model: Quectel RG255C-GL
+      imsi: "001010000000010"
+      attached_to: qhat21
+    - id: qhat22
+      label: Quectel RG255C-GL qhat22
+      model: Quectel RG255C-GL
+      imsi: "001010000000011"
+      attached_to: qhat22
+    - id: qhat23
+      label: Quectel RG255C-GL qhat23
+      model: Quectel RG255C-GL
+      imsi: "001010000000012"
+      attached_to: qhat23
+    - id: qhat10
+      label: Quectel RM520N-GL qhat10
+      model: Quectel RM520N-GL
+      imsi: "001010000000013"
+      attached_to: qhat10
+    - id: qhat11
+      label: Quectel RM520N-GL qhat11
+      model: Quectel RM520N-GL
+      imsi: "001010000000014"
+      attached_to: qhat11
+    - id: rg530f-01
+      label: Quectel RG-530F 01
+      model: Quectel RG-530F
+      imsi: "001010000000015"
+      attached_to: pc03
+    - id: rg530f-02
+      label: Quectel RG-530F 02
+      model: Quectel RG-530F
+      imsi: "001010000000016"
+      attached_to: pc04
+    - id: fit29
+      label: Quectel RM500Q-GL on fit29
+      model: Quectel RM500Q-GL
+      imsi: "001010000000019"
+      attached_to: fit29
+    - id: fit32
+      label: Quectel RM500Q-GL on fit32
+      model: Quectel RM500Q-GL
+      imsi: "001010000000020"
+      attached_to: fit32
+    - id: fit34
+      label: Quectel RM500Q-GL on fit34
+      model: Quectel RM500Q-GL
+      imsi: "001010000000021"
+      attached_to: fit34

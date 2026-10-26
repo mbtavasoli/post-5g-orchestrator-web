@@ -1,12 +1,12 @@
 # Backend architecture (v1 proposal)
 
-Status: **proposal, not implemented.** Scope of v1:
+Status: v1 (configuration) and the deployment actions of section 10 are implemented. Scope of v1:
 
 1. Create or load a deployment configuration.
 2. Validate and reconcile it with the orchestrator.
 3. Return the resulting configuration to the frontend.
 
-Deployment actions (provision, deploy, install, …) are **out of scope** for v1. Their later design is sketched in section 10.
+Deployment actions (provision, deploy, install, …) are described in section 10.
 
 Facts about the orchestrator come from `../orchestrator` (see `AGENTS.md`). They were checked with `../orchestrator/.venv-1`. Everything else in this document is web-app design and adds **no new orchestrator abstractions**.
 
@@ -15,7 +15,7 @@ Facts about the orchestrator come from `../orchestrator` (see `AGENTS.md`). They
 ## 1. Principles
 
 - **Thin backend.** The backend handles HTTP, file storage and error formatting. Everything about 5G (validation, defaults, reference resolution, dependency order, execution) stays in the orchestrator.
-- **One bridge module.** Only `backend/app/orchestrator_bridge.py` imports `orchestrator.*` and `metamodel.*`. The routes never touch managers directly. If the orchestrator API changes, only this file changes.
+- **Bridge modules.** Only `backend/app/orchestrator_bridge.py` and `backend/app/orchestrator_actions.py` import `orchestrator.*` and `metamodel.*`. The routes never touch managers directly. If the orchestrator API changes, only this file changes.
 - **Options come from the models, never from examples.** See section 2.
 - **No orchestrator changes.** If something is missing upstream, record it in section 11. Do not patch it.
 
@@ -52,6 +52,16 @@ Model validators enforce some rules across fields. These are only checked when t
 - References must point to defined, ready components.
 
 The frontend may use the options to guide input, but **the backend's validation and reconciliation have the final say**.
+
+### Provider inventory is not a supported-options list
+
+`docs/provider-catalogs.yaml` is a curated convenience inventory for SLICES and
+R2Lab. It does not restrict the orchestrator: custom infrastructure remains
+available, and the source models still define all valid implementation,
+component, RU, UE, role and provisioner values. The bridge validates catalog RU
+type/model pairs and UE IMSIs against the installed `metamodel`, and augments the
+catalog response with BI and R2Lab provisioner schemas/defaults introspected from
+the installed orchestrator.
 
 ## 3. Framework: FastAPI
 
@@ -98,7 +108,9 @@ Flask and Django were rejected: they are WSGI-first and don't integrate with Pyd
 ```
 post-5g-orchestrator-web/
 ├── AGENTS.md
-├── docs/backend-architecture.md
+├── docs/
+│   ├── backend-architecture.md
+│   └── provider-catalogs.yaml      # curated SLICES/R2Lab inventory
 ├── backend/
 │   ├── pyproject.toml              # fastapi, uvicorn; dev: pytest, httpx
 │   ├── README.md                   # setup + run commands
@@ -223,6 +235,7 @@ These let the frontend build its forms and choices **dynamically**. Every value 
 | `GET` | `/api/schema/metamodel` | JSON Schema | `MetaModel.model_json_schema(mode="validation")` |
 | `GET` | `/api/schema/deployment-model` | JSON Schema | `DeploymentModel.model_json_schema(mode="validation")` |
 | `GET` | `/api/options` | Option catalog (below) | Enums, `SUPPORTED_*`, `CATALOGS`, `Provisioner`, `NodeRole`, defaults |
+| `GET` | `/api/provider-catalogs` | Curated provider inventory plus model-derived provisioner metadata | `docs/provider-catalogs.yaml`, validated against installed RU/UE models; `BIParams`, `BIProvisioner`, `R2LabParams`, `R2LabProvisioner` |
 | `GET` | `/api/options/advanced-config/{category}/{implementation}/{type}` | JSON Schema of the `advanced_config` model for that combination | `ADVANCED_*_CONFIG_MAPPING`, falling back to `Generic*AdvancedConfig` |
 
 `category` is one of `core | ran | ric | ue`. For `ue`, `type` is a `UEType`, because the UE mapping is keyed by UE type. An unknown implementation or type returns 404 with the error envelope.
@@ -330,19 +343,83 @@ One envelope for every error:
 - Non-Pydantic exceptions have no structured location: `details` is `null`, and `message` is `str(exc)`, which already names the component.
 - Any other exception is a 500 with `kind: "internal"`. It is logged on the server, not echoed to the client.
 
-## 10. Long-running actions (later; design only)
+## 10. Long-running deployment actions (implemented)
 
-Orchestrator actions are `async`, take minutes, run Ansible over SSH, and change `deployment_model` in place (`is_installed`, `network_info`, `k8s_status`, …). There are no progress hooks.
+Modules: `app/orchestrator_actions.py` (stages over existing managers; the only other module
+that imports the orchestrator), `app/jobs.py` (job runner), `app/providers/{slices,r2lab}.py`,
+`app/routes/{actions,providers}.py`, `app/redaction.py`.
 
-- **Execution:** an in-process job runner using an `asyncio.create_task` per job, started from FastAPI's lifespan. Use one `asyncio.Lock` per deployment, so only one action runs on a deployment at a time (managers have no locking). No Celery or Redis until there is more than one backend process.
-- **Job record:** `data/deployments/<id>/jobs/<job_id>.json` with `stage`, `action`, `status` (`queued | running | succeeded | failed | interrupted`), timestamps and the error envelope. API: `POST /api/deployments/{id}/actions` returns `202` and a job id. Then `GET /api/jobs/{job_id}` to poll.
-- **State snapshots:** follow the convention already used in the tutorials and `examples/digitafrica-demo/backup/state/`: after each stage, save `state/metamodel.<stage>.yaml` and `state/deployment_model.<stage>.yaml` from `manager.metamodel` and `manager.deployment_model`.
-  - **Save even on failure.** Components in earlier dependency levels are already marked installed.
-  - The latest snapshot becomes the starting point (`preceding=` / `metamodel=` + `deployment_model=`) for the next stage. That also fixes the random-IP problem, because reconciled IPs are saved together with the deployed state.
-- **Available actions** must also come from the manager classes' public methods, as the orchestrator defines them. Don't take them from what the tutorials happen to call.
-- **Logs and progress:** set the existing `params.ansible.runner_path` to `data/deployments/<id>/ansible-runner` so artefacts are kept per deployment. Call actions with `quiet=True`. Stream by tailing the ansible-runner artefact files over SSE or polling.
-- **Restarts:** jobs still marked `running` at startup become `interrupted`. The orchestrator's state checks (`is_installed`, `ignore_invalid_states`) make re-running a stage safe.
-- **Open decision for phase 2:** how a user edits the input after a stage has been deployed (re-base on the latest snapshot, or diff against it). Decide this with the user before implementing.
+### Stages
+
+Order and calls follow `examples/default` and `examples/r2lab` of the orchestrator. A stage
+applies only when the models contain something for it; otherwise it is `skipped`.
+
+| Stage | deploy | remove | Applies when |
+|---|---|---|---|
+| infrastructure | `ProvisioningManagement.provision_nodes()` | `unprovision_nodes(nodes with a provisioner)` | a node has a provisioner (e.g. SLICES BI) |
+| kubernetes | `K8SManagement.deploy()` | `K8SManagement.remove()` | there are workloads |
+| core | `CoreManagement.deploy()` (see quirk below) | `CoreManagement.remove()` | Core components |
+| ric | `RICManagement.deploy()` | `RICManagement.remove()` | RIC components |
+| radio | `ProvisioningManagement.provision(RUs + COTS UEs)` | `unprovision(...)` | an RU/COTS UE has a provisioner (R2Lab) |
+| ran | `RANManagement.deploy()` | `RANManagement.remove()` | RAN components |
+| ue | `UEManagement.deploy()`, then `connect()` for COTS | `disconnect()`, then `remove()` | UEs |
+
+`radio` also has `reserve` → `ProvisioningManagement.reserve(force=True)`, i.e. the r2lab
+provisioner's own reserve role (creates the testbed lease and powers off all R2Lab devices).
+
+Status per stage is derived from the saved `DeploymentModel` (`is_provisioned`, `k8s_status`,
+`is_installed`, `is_connected`), plus the last job run: `pending | running | succeeded |
+failed | blocked | skipped`. A stage can be deployed only after every earlier applicable stage
+succeeded, and removed only when no later stage has anything deployed. Retrying re-runs the
+same manager call; the orchestrator skips what is already done (`ignore_invalid_states`).
+
+### Jobs and state
+
+- `POST /api/deployments/{id}/actions` `{action: deploy|remove|reserve, stages?, reservation_minutes?}`
+  returns `202` with a job; `deploy` without `stages` runs every remaining applicable stage.
+- Poll `GET /api/deployments/{id}/runtime` (stages, requirements, active/last job),
+  `GET .../jobs/{job_id}` and `GET .../jobs/{job_id}/logs`.
+- One asyncio task per job, at most one active job per deployment (`409 conflict` otherwise).
+  Jobs left `running` by a previous process become `interrupted` at startup.
+- State: the first action copies the input to `state/`; every stage then starts from
+  `state/{metamodel,deployment_model}.yaml` and saves them back afterwards, **also on failure**
+  (managers mutate their model in place), with a `state/*.{stage}.{action}.yaml` snapshot.
+  Once state exists the input can no longer be replaced (`PUT` → `409`), because rebuilding
+  from input would lose runtime state.
+- Runtime paths are set per deployment before each action: `params.ansible.runner_path =
+  <id>/ansible-runner`, `params.k8s.local_kubeconfig_path = <id>/kubeconfig/admin.conf`.
+
+### Providers
+
+- **SLICES**: the BI/POS roles call the `slices` CLI on the backend host and assume it is
+  logged in. `GET /api/providers/slices/auth` runs `slices auth show`; `POST .../login` starts
+  `slices auth login` (device-code flow) and returns the verification URL it prints. The token
+  stays in `~/.slices/auth.json`. Expiry/refresh are not documented, so an expired login cannot
+  be detected before BI fails (the failure and its Ansible output are then shown).
+  `POST5G_SLICES_BIN_DIR` points at the CLI if it is not on `PATH` (passed as `extra_path`).
+- **R2Lab**: `POST /api/providers/r2lab/session` checks email/password with the R2Lab API
+  (`/auth/login`, `/slices/by-name/{name}`) and keeps them **in memory only**. At action time
+  the backend injects a `provisioners.r2lab` (`R2LabParams` with `reservation_params`) into the
+  model passed to the manager and removes it before saving, so credentials never reach disk
+  or the browser. Reads use only published endpoints: `/leases/current`, `/leases`
+  (R2Lab API) and `/resource/list`, `/token/r2lab`, `/power/{name}/status` (device manager).
+  `DELETE /api/providers/r2lab/leases/{id}` releases the user's own lease (`DELETE /leases/{id}`).
+- Requirements (`SLICES authentication`, `R2Lab sign-in`, `R2Lab reservation` = current lease
+  belongs to your slice) are checked before a job starts and again before each stage; unmet
+  ones return `409 authentication_required | reservation_required` with `provider`.
+
+### Errors and logs
+
+Error kinds: `validation`, `reference`, `state`, `reconciliation`, `conflict`,
+`authentication_required`, `reservation_required`, `resource_unavailable`,
+`provisioning_failure` (infrastructure/radio), `kubernetes_failure`, `component_failure`,
+`provider_error`, `internal`. Stage failures carry the orchestrator exception chain plus the
+`fatal:` / `FAILED!` lines of the stage's Ansible output in `details`.
+
+Logs are only the `artifacts/*/stdout` files of ansible-runner runs started during the job,
+read from the deployment's runner directory (never `env/`, `inventory/` or other files).
+Secret values found in the models or the R2Lab session, bearer tokens, JWTs and kubeadm join
+tokens are masked in logs, error details and every model dump returned by the API.
 
 ## 11. Risks and notes
 

@@ -1,5 +1,7 @@
 """File-based storage for deployment model pairs."""
 
+from __future__ import annotations
+
 import json
 import os
 import shutil
@@ -9,7 +11,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from app import orchestrator_bridge as bridge
-from app.schemas import DeploymentMetadata, StoredDeploymentMetadata
+from app.schemas import DeploymentMetadata, JobRecord, StoredDeploymentMetadata
 
 
 class DeploymentNotFoundError(Exception):
@@ -96,6 +98,83 @@ class DeploymentStore:
     def require(self, deployment_id: str) -> StoredDeploymentMetadata:
         """Return metadata, or raise before processing a replacement body."""
         return self._read_metadata(self._deployment_dir(deployment_id))
+
+    # ---- runtime state (written only by deployment actions) ---------------------------
+    #
+    # <id>/state/metamodel.yaml, <id>/state/deployment_model.yaml   current state
+    # <id>/state/metamodel.<stage>.yaml, ...deployment_model.<stage>.yaml   per-stage snapshot
+    # <id>/jobs/<job_id>.json, <id>/ansible-runner/, <id>/kubeconfig/
+    #
+    # The input files are never overwritten by actions, and the state is never rebuilt from
+    # the input once it exists, so runtime fields (is_installed, network_info, IPs, ...) persist.
+
+    def runtime_dir(self, deployment_id: str) -> Path:
+        """Return the deployment directory used for runtime files."""
+        return self._deployment_dir(deployment_id)
+
+    def has_state(self, deployment_id: str) -> bool:
+        """Return whether a deployment action already produced runtime state."""
+        return (self._deployment_dir(deployment_id) / "state" / "deployment_model.yaml").is_file()
+
+    def load_state(
+        self,
+        deployment_id: str,
+    ) -> tuple[bridge.MetaModel, bridge.DeploymentModel] | None:
+        """Load the current runtime state, if any action has run."""
+        state = self._deployment_dir(deployment_id) / "state"
+        if not (state / "deployment_model.yaml").is_file():
+            return None
+        return (
+            bridge.MetaModel.from_yaml_file(str(state / "metamodel.yaml")),
+            bridge.DeploymentModel.from_yaml_file(str(state / "deployment_model.yaml")),
+        )
+
+    def save_state(
+        self,
+        deployment_id: str,
+        metamodel: bridge.MetaModel,
+        deployment_model: bridge.DeploymentModel,
+        stage: str | None = None,
+    ) -> None:
+        """Atomically save the runtime state, plus a per-stage snapshot when given."""
+        state = self._deployment_dir(deployment_id) / "state"
+        state.mkdir(exist_ok=True)
+        metamodel_yaml = metamodel.to_yaml(exclude_defaults=False)
+        deployment_yaml = deployment_model.to_yaml(exclude_defaults=False)
+        self._atomic_write(state / "metamodel.yaml", metamodel_yaml)
+        self._atomic_write(state / "deployment_model.yaml", deployment_yaml)
+        if stage:
+            self._atomic_write(state / f"metamodel.{stage}.yaml", metamodel_yaml)
+            self._atomic_write(state / f"deployment_model.{stage}.yaml", deployment_yaml)
+
+    def save_job(self, job: JobRecord) -> None:
+        """Persist a job record."""
+        jobs = self._deployment_dir(job.deployment_id) / "jobs"
+        jobs.mkdir(exist_ok=True)
+        self._atomic_write(jobs / f"{job.id}.json", job.model_dump_json(indent=2) + "\n")
+
+    def list_jobs(self, deployment_id: str) -> list[JobRecord]:
+        """Return a deployment's jobs, oldest first."""
+        jobs = self._deployment_dir(deployment_id) / "jobs"
+        if not jobs.is_dir():
+            return []
+        records = [JobRecord.model_validate_json(path.read_text(encoding="utf-8")) for path in jobs.glob("*.json")]
+        return sorted(records, key=lambda record: record.created_at)
+
+    def get_job(self, deployment_id: str, job_id: str) -> JobRecord:
+        """Return one job record."""
+        try:
+            canonical = str(UUID(job_id))
+        except ValueError as exc:
+            raise DeploymentNotFoundError(job_id) from exc
+        path = self._deployment_dir(deployment_id) / "jobs" / f"{canonical}.json"
+        if not path.is_file():
+            raise DeploymentNotFoundError(job_id)
+        return JobRecord.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def all_jobs(self) -> list[JobRecord]:
+        """Return jobs across all deployments (used at startup)."""
+        return [job for metadata in self.list() for job in self.list_jobs(metadata.id)]
 
     @staticmethod
     def public_metadata(metadata: StoredDeploymentMetadata) -> DeploymentMetadata:

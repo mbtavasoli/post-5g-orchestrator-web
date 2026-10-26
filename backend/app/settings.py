@@ -19,3 +19,5 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default_factory=default_data_dir)
     host: str = "127.0.0.1"
     port: int = 8000
+    slices_bin_dir: Path | None = None
+    """Directory containing the SLICES CLI, if it is not on PATH (passed to Ansible as extra_path)."""

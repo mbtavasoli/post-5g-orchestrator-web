@@ -1,6 +1,8 @@
 """FastAPI application assembly and shared exception handling."""
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -8,8 +10,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.jobs import JobRunner
 from app.orchestrator_bridge import BridgeError
-from app.routes.deployments import router
+from app.providers.r2lab import R2LabService
+from app.providers.slices import SlicesAuth
+from app.routes.actions import router as actions_router
+from app.routes.deployments import router as deployments_router
+from app.routes.options import router as options_router
+from app.routes.providers import router as providers_router
 from app.schemas import ErrorBody, ErrorResponse
 from app.settings import Settings
 from app.store import DeploymentNotFoundError, DeploymentStore
@@ -18,28 +26,39 @@ logger = logging.getLogger(__name__)
 
 
 def _error_response(status_code: int, **kwargs: Any) -> JSONResponse:
-    envelope = ErrorResponse(error=ErrorBody(**kwargs))
-    return JSONResponse(status_code=status_code, content=envelope.model_dump(mode="json"))
+    envelope = ErrorResponse(error=ErrorBody(**kwargs)).model_dump(mode="json")
+    if envelope["error"].get("provider") is None:
+        envelope["error"].pop("provider", None)
+    return JSONResponse(status_code=status_code, content=envelope)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create an application, optionally with isolated settings for tests."""
     configured_settings = settings or Settings()
-    application = FastAPI(title="Post-5G Orchestrator API", version="1.0.0")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.jobs.mark_interrupted()
+        yield
+        await app.state.jobs.wait_idle()
+
+    application = FastAPI(title="Post-5G Orchestrator API", version="1.1.0", lifespan=lifespan)
+    store = DeploymentStore(configured_settings.data_dir)
+    slices = SlicesAuth(bin_dir=configured_settings.slices_bin_dir)
+    r2lab = R2LabService()
     application.state.settings = configured_settings
-    application.state.store = DeploymentStore(configured_settings.data_dir)
-    application.include_router(router)
+    application.state.store = store
+    application.state.slices = slices
+    application.state.r2lab = r2lab
+    application.state.jobs = JobRunner(store, configured_settings, slices, r2lab)
+    application.include_router(deployments_router)
+    application.include_router(options_router)
+    application.include_router(actions_router)
+    application.include_router(providers_router)
 
     @application.exception_handler(BridgeError)
     async def handle_bridge_error(_request: Request, exc: BridgeError) -> JSONResponse:
-        return _error_response(
-            exc.status_code,
-            kind=exc.kind,
-            stage=exc.stage,
-            exception=exc.exception,
-            message=exc.message,
-            details=exc.details,
-        )
+        return _error_response(exc.status_code, **exc.body())
 
     @application.exception_handler(DeploymentNotFoundError)
     async def handle_not_found(_request: Request, exc: DeploymentNotFoundError) -> JSONResponse:
