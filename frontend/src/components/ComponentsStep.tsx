@@ -40,7 +40,6 @@ export default function ComponentsStep({
   onChange,
 }: ComponentsStepProps) {
   const ctx: BuilderContext = { options, catalogs, defaults: modelDefaults };
-  const warnings = builderWarnings(state, modelDefaults);
 
   return (
     <Stack spacing={3}>
@@ -48,7 +47,8 @@ export default function ComponentsStep({
         <Box>
           <Typography variant="overline">Network choices</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Every selectable value below comes from the backend model catalogs. Add as many instances as the topology needs.
+            Every selectable value below comes from the backend model catalogs. Add as many
+            instances as the topology needs.
           </Typography>
         </Box>
         <HubRoundedIcon color="action" />
@@ -61,10 +61,14 @@ export default function ComponentsStep({
           description="Used by DeploymentModel.core.implementation."
           value={state.coreImplementation}
           options={options.core.implementations}
-          onChange={(coreImplementation) => onChange(finalizePatch(state, ctx, {
-            coreImplementation,
-            coreComponentTypes: options.core.supported_components[coreImplementation] ?? [],
-          }))}
+          onChange={(coreImplementation) =>
+            onChange(
+              finalizePatch(state, ctx, {
+                coreImplementation,
+                coreComponentTypes: options.core.supported_components[coreImplementation] ?? [],
+              }),
+            )
+          }
           disabled={disabled}
         />
         <ImplementationSelect
@@ -73,7 +77,9 @@ export default function ComponentsStep({
           description="Used by DeploymentModel.ran.implementation."
           value={state.ranImplementation}
           options={options.ran.implementations}
-          onChange={(ranImplementation) => onChange(finalizePatch(state, ctx, { ranImplementation }))}
+          onChange={(ranImplementation) =>
+            onChange(finalizePatch(state, ctx, { ranImplementation }))
+          }
           disabled={disabled}
         />
       </Box>
@@ -85,30 +91,31 @@ export default function ComponentsStep({
         selectedTypes={state.coreComponentTypes}
         supportedTypes={options.core.supported_components[state.coreImplementation] ?? []}
         disabled={disabled}
-        onChange={(coreComponentMode, coreComponentTypes) => onChange(finalizePatch(state, ctx, {
-          coreComponentMode,
-          coreComponentTypes,
-        }))}
+        onChange={(coreComponentMode, coreComponentTypes) =>
+          onChange(
+            finalizePatch(state, ctx, {
+              coreComponentMode,
+              coreComponentTypes,
+            }),
+          )
+        }
       />
 
       <RadioUnitsSection ctx={ctx} state={state} disabled={disabled} onChange={onChange} />
       <RanInstancesSection ctx={ctx} state={state} disabled={disabled} onChange={onChange} />
       <UeInstancesSection ctx={ctx} state={state} disabled={disabled} onChange={onChange} />
 
-      {warnings.length > 0 && (
-        <Alert severity="warning" variant="outlined">
-          <AlertTitle sx={{ fontWeight: 800 }}>Allowed by the models, but worth checking</AlertTitle>
-          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-            {warnings.map((warning) => <li key={warning}><Typography variant="body2">{warning}</Typography></li>)}
-          </Box>
-        </Alert>
-      )}
-
       <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          spacing={2}
+          sx={{ justifyContent: "space-between" }}
+        >
           <Box>
             <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>RAN Intelligent Controller</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                RAN Intelligent Controller
+              </Typography>
               <Chip label="Optional" size="small" variant="outlined" />
             </Stack>
             <Typography variant="caption" color="text.secondary">
@@ -116,13 +123,15 @@ export default function ComponentsStep({
             </Typography>
           </Box>
           <FormControlLabel
-            control={(
+            control={
               <Switch
                 checked={state.ricEnabled}
-                onChange={(event) => onChange(finalizePatch(state, ctx, { ricEnabled: event.target.checked }))}
+                onChange={(event) =>
+                  onChange(finalizePatch(state, ctx, { ricEnabled: event.target.checked }))
+                }
                 disabled={disabled}
               />
-            )}
+            }
             label={state.ricEnabled ? "Enabled" : "Disabled"}
           />
         </Stack>
@@ -134,7 +143,9 @@ export default function ComponentsStep({
               description="Used by DeploymentModel.ric.implementation."
               value={state.ricImplementation}
               options={options.ric.implementations}
-              onChange={(ricImplementation) => onChange(finalizePatch(state, ctx, { ricImplementation }))}
+              onChange={(ricImplementation) =>
+                onChange(finalizePatch(state, ctx, { ricImplementation }))
+              }
               disabled={disabled}
             />
           </Box>

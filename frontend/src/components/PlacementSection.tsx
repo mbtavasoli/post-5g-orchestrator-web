@@ -36,11 +36,18 @@ const CATEGORY_LABELS: Record<PlacementCategory, string> = {
   ue: "UE",
 };
 
-export default function PlacementSection({ ctx, state, disabled = false, onChange }: PlacementSectionProps) {
+export default function PlacementSection({
+  ctx,
+  state,
+  disabled = false,
+  onChange,
+}: PlacementSectionProps) {
   const { catalogs } = ctx;
   const nodes = builderNodeNames(state, catalogs);
   const plan = builderPlacementPlan(state, ctx.options, catalogs);
-  const compatibleNodes = nodes.filter((node) => catalogs.r2lab.required_sophianodes.includes(node));
+  const compatibleNodes = nodes.filter((node) =>
+    catalogs.r2lab.required_sophianodes.includes(node),
+  );
 
   function setMode(placementMode: "simple" | "explicit") {
     const next = { ...state, placementMode };
@@ -54,11 +61,13 @@ export default function PlacementSection({ ctx, state, disabled = false, onChang
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
-      <Stack direction="row" sx={{ alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}>
+      <Stack
+        direction="row"
+        sx={{ alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}
+      >
         <Box>
-          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>Function placement</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Every instance is placed on its own. Uses node roles, force_type_scheduling, and node_name.
+          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+            Function placement
           </Typography>
         </Box>
         <AccountTreeRoundedIcon color="action" />
@@ -76,8 +85,18 @@ export default function PlacementSection({ ctx, state, disabled = false, onChang
         onChange={(event) => setMode(event.target.value as "simple" | "explicit")}
         aria-label="Function placement mode"
       >
-        <FormControlLabel value="simple" control={<Radio />} label="Simple: one default node" disabled={disabled} />
-        <FormControlLabel value="explicit" control={<Radio />} label="Explicit placement" disabled={disabled} />
+        <FormControlLabel
+          value="simple"
+          control={<Radio />}
+          label="Simple: one default node"
+          disabled={disabled}
+        />
+        <FormControlLabel
+          value="explicit"
+          control={<Radio />}
+          label="Explicit placement"
+          disabled={disabled}
+        />
       </RadioGroup>
 
       {state.placementMode === "simple" ? (
@@ -91,22 +110,36 @@ export default function PlacementSection({ ctx, state, disabled = false, onChang
           disabled={disabled || nodes.length === 0}
           sx={{ mt: 1.5 }}
         >
-          {nodes.map((node) => <MenuItem key={node} value={node}>{node}</MenuItem>)}
+          {nodes.map((node) => (
+            <MenuItem key={node} value={node}>
+              {node}
+            </MenuItem>
+          ))}
         </TextField>
       ) : (
         <Stack spacing={2.5} sx={{ mt: 1.5 }}>
           <Typography variant="caption" color="text.secondary">
-            When every instance of a type is on the same node, it gets force_type_scheduling and that node gets the type role.
-            When instances of one type are on different nodes, each one is pinned with node_name, as the RU tutorial does for its DU.
-            UEs always use node_name.
+            When every instance of a type is on the same node, it gets force_type_scheduling and
+            that node gets the type role. When instances of one type are on different nodes, each
+            one is pinned with node_name, as the RU tutorial does for its DU. UEs always use
+            node_name.
           </Typography>
           {(Object.keys(CATEGORY_LABELS) as PlacementCategory[]).map((category) => {
             const assignments = plan.filter((assignment) => assignment.category === category);
             if (assignments.length === 0) return null;
             return (
               <Box key={category}>
-                <Typography variant="overline" color="text.secondary">{CATEGORY_LABELS[category]}</Typography>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2, mt: 0.5 }}>
+                <Typography variant="overline" color="text.secondary">
+                  {CATEGORY_LABELS[category]}
+                </Typography>
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                    gap: 2,
+                    mt: 0.5,
+                  }}
+                >
                   {assignments.map((assignment) => {
                     const choices = assignment.needsR2LabNode ? compatibleNodes : nodes;
                     const current = state.componentPlacements[assignment.key] ?? "";
@@ -116,14 +149,23 @@ export default function PlacementSection({ ctx, state, disabled = false, onChang
                         select
                         label={assignment.label}
                         value={choices.includes(current) ? current : ""}
-                        onChange={(event) => onChange({
-                          componentPlacements: { ...state.componentPlacements, [assignment.key]: event.target.value },
-                        })}
+                        onChange={(event) =>
+                          onChange({
+                            componentPlacements: {
+                              ...state.componentPlacements,
+                              [assignment.key]: event.target.value,
+                            },
+                          })
+                        }
                         helperText={strategyText(assignment)}
                         error={!choices.includes(current)}
                         disabled={disabled || choices.length === 0}
                       >
-                        {choices.map((node) => <MenuItem key={node} value={node}>{node}</MenuItem>)}
+                        {choices.map((node) => (
+                          <MenuItem key={node} value={node}>
+                            {node}
+                          </MenuItem>
+                        ))}
                       </TextField>
                     );
                   })}
@@ -136,11 +178,20 @@ export default function PlacementSection({ ctx, state, disabled = false, onChang
 
       {plan.length > 0 && nodes.length > 0 && (
         <Box sx={{ mt: 2.5 }}>
-          <Typography variant="overline" color="text.secondary">Placement summary</Typography>
+          <Typography variant="overline" color="text.secondary">
+            Placement summary
+          </Typography>
           <Stack spacing={1} sx={{ mt: 0.5 }}>
             {[...byNode.entries()].map(([node, assignments]) => (
-              <Stack key={node || "unassigned"} direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ alignItems: { sm: "center" } }}>
-                <Typography variant="body2" sx={{ fontWeight: 800, minWidth: 140 }}>{node || "Unassigned"}</Typography>
+              <Stack
+                key={node || "unassigned"}
+                direction={{ xs: "column", sm: "row" }}
+                spacing={1}
+                sx={{ alignItems: { sm: "center" } }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 800, minWidth: 140 }}>
+                  {node || "Unassigned"}
+                </Typography>
                 <Stack direction="row" spacing={0.75} useFlexGap sx={{ flexWrap: "wrap" }}>
                   {assignments.map((assignment) => (
                     <Chip
@@ -162,7 +213,9 @@ export default function PlacementSection({ ctx, state, disabled = false, onChang
 }
 
 function strategyText(assignment: PlacementAssignment): string {
-  const r2lab = assignment.needsR2LabNode ? " Drives an R2Lab radio: compatible SophiaNodes only." : "";
+  const r2lab = assignment.needsR2LabNode
+    ? " Drives an R2Lab radio: compatible SophiaNodes only."
+    : "";
   if (assignment.strategy === "type-role") {
     return `force_type_scheduling · all ${assignment.type} instances on this node.${r2lab}`;
   }

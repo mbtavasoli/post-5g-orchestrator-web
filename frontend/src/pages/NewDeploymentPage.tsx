@@ -204,13 +204,6 @@ export default function NewDeploymentPage({
               {step.label}
             </Typography>
           </Box>
-          <Chip
-            label="Model-backed"
-            color="success"
-            variant="outlined"
-            size="small"
-            sx={{ fontWeight: 700 }}
-          />
         </Stack>
 
         <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4, mx: { xs: -2, sm: 0 } }}>

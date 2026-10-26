@@ -42,10 +42,6 @@ export default function ConfigurationStep({
         <TuneRoundedIcon color="action" />
       </Stack>
 
-      <Alert severity="info" variant="outlined">
-        Advanced implementation-specific configuration is intentionally excluded from this builder.
-      </Alert>
-
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2.5 }}>
         <TextField
           select
@@ -56,7 +52,11 @@ export default function ConfigurationStep({
           disabled={disabled}
         >
           <MenuItem value="">Let the model remain unset</MenuItem>
-          {nodes.map((node) => <MenuItem key={node} value={node}>{node}</MenuItem>)}
+          {nodes.map((node) => (
+            <MenuItem key={node} value={node}>
+              {node}
+            </MenuItem>
+          ))}
         </TextField>
 
         <TextField
@@ -89,7 +89,6 @@ export default function ConfigurationStep({
           disabled={disabled}
           slotProps={{ htmlInput: { min: bandwidth.minimum, max: bandwidth.maximum } }}
         />
-
       </Box>
     </Stack>
   );

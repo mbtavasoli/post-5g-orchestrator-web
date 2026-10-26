@@ -50,7 +50,6 @@ export interface DeploymentBuilderState {
   biCreateExperiment: boolean;
   biExperimentDuration: string;
   biNodeDuration: string;
-  biAllowCreated: boolean;
   /** SLICES username, used as jump-host user for SophiaNodes reached through the POS gateway. */
   slicesUsername: string;
   coreImplementation: string;
@@ -117,26 +116,34 @@ export function createInitialBuilderState(
 ): DeploymentBuilderState {
   const firstSophianode = catalogs.slices.sophianodes.find((node) => node.available)?.id ?? "";
 
-  const rus = Object.values(options.ru.default_components).map((ru, index) => (
-    createRuInstance(`ru${index + 1}`, ru.type, ru.model ?? "")
-  ));
+  const rus = Object.values(options.ru.default_components).map((ru, index) =>
+    createRuInstance(`ru${index + 1}`, ru.type, ru.model ?? ""),
+  );
   const supportedRan = options.ran.supported_components[options.ran.default_implementation] ?? [];
   const ranInstances: RanInstance[] = [];
   for (const component of Object.values(options.ran.default_components)) {
     if (!supportedRan.includes(component.type)) continue;
-    const name = nextInstanceName(component.type, ranInstances.map((instance) => instance.name));
+    const name = nextInstanceName(
+      component.type,
+      ranInstances.map((instance) => instance.name),
+    );
     ranInstances.push(createRanInstance(name, component.type, ranInstances, defaults));
   }
   const ues: UeInstance[] = [];
   for (const ue of Object.values(options.ue.default_components)) {
     const type = ue.type || options.ue.types[0] || "";
-    ues.push(createUeInstance(
-      nextInstanceName("ue", ues.map((candidate) => candidate.name)),
-      type,
-      ue.implementation ?? options.ue.default_implementation,
-      ues,
-      defaults,
-    ));
+    ues.push(
+      createUeInstance(
+        nextInstanceName(
+          "ue",
+          ues.map((candidate) => candidate.name),
+        ),
+        type,
+        ue.implementation ?? options.ue.default_implementation,
+        ues,
+        defaults,
+      ),
+    );
   }
   const filled = fillMissingReferences(rus, ranInstances, ues);
 
@@ -155,11 +162,11 @@ export function createInitialBuilderState(
     biCreateExperiment: catalogs.provisioner_models.bi.params_defaults.create_experiment,
     biExperimentDuration: catalogs.provisioner_models.bi.params_defaults.experiment_duration,
     biNodeDuration: catalogs.provisioner_models.bi.params_defaults.node_duration,
-    biAllowCreated: catalogs.provisioner_models.bi.params_defaults.allow_created,
     slicesUsername: "",
     coreImplementation: options.core.default_implementation,
     coreComponentMode: "all",
-    coreComponentTypes: options.core.supported_components[options.core.default_implementation] ?? [],
+    coreComponentTypes:
+      options.core.supported_components[options.core.default_implementation] ?? [],
     ranImplementation: options.ran.default_implementation,
     ranInstances: filled.ranInstances,
     rus,
@@ -208,7 +215,9 @@ export function validateBuilderStep(
 
   if (step === 3 && state.masterNode) {
     const nodeNames = builderNodeNames(state, catalogs);
-    return nodeNames.includes(state.masterNode) ? [] : ["Choose a master node from the current inventory."];
+    return nodeNames.includes(state.masterNode)
+      ? []
+      : ["Choose a master node from the current inventory."];
   }
 
   return [];
@@ -219,19 +228,31 @@ export function buildDeploymentRequest(
   options: OptionsResponse,
   catalogs: ProviderCatalogsResponse,
 ): CreateDeploymentRequest {
-  const errors = [0, 1, 2, 3].flatMap((step) => validateBuilderStep(step, state, options, catalogs));
+  const errors = [0, 1, 2, 3].flatMap((step) =>
+    validateBuilderStep(step, state, options, catalogs),
+  );
   if (errors.length > 0) {
     throw new Error(errors.join(" "));
   }
 
   const ruNames = new Map(state.rus.map((ru) => [ru.id, ru.name.trim()]));
-  const ranNames = new Map(state.ranInstances.map((instance) => [instance.id, instance.name.trim()]));
-  const physicalRuNames = state.rus.filter((ru) => ru.type !== "simulated").map((ru) => ru.name.trim());
+  const ranNames = new Map(
+    state.ranInstances.map((instance) => [instance.id, instance.name.trim()]),
+  );
+  const physicalRuNames = state.rus
+    .filter((ru) => ru.type !== "simulated")
+    .map((ru) => ru.name.trim());
   const cotsUeNames = state.ues.filter((ue) => ue.type === "cots").map((ue) => ue.name.trim());
 
-  const infrastructure: { nodes: JsonObject; rus: JsonObject; ues: JsonObject; provisioners?: JsonObject } = state.resourceSource === "custom"
-    ? normalizeCustomInfrastructure(state.resources, physicalRuNames, cotsUeNames).deploymentModel
-    : buildProviderInfrastructure(state, catalogs);
+  const infrastructure: {
+    nodes: JsonObject;
+    rus: JsonObject;
+    ues: JsonObject;
+    provisioners?: JsonObject;
+  } =
+    state.resourceSource === "custom"
+      ? normalizeCustomInfrastructure(state.resources, physicalRuNames, cotsUeNames).deploymentModel
+      : buildProviderInfrastructure(state, catalogs);
 
   const coreComponents = buildSelectedComponents(
     options.core.default_components,
@@ -241,7 +262,9 @@ export function buildDeploymentRequest(
       options.core.supported_components[state.coreImplementation] ?? [],
     ),
   );
-  const amfName = Object.entries(coreComponents).find(([, component]) => isObject(component) && component.type === "amf")?.[0];
+  const amfName = Object.entries(coreComponents).find(
+    ([, component]) => isObject(component) && component.type === "amf",
+  )?.[0];
 
   const radioConfiguration: JsonObject = {};
   setNumberIfPresent(radioConfiguration, "nrBand", state.nrBand);
@@ -256,7 +279,8 @@ export function buildDeploymentRequest(
     }
     if (isRadioType(instance.type)) {
       config.ru = ruNames.get(instance.ruId);
-      if (Object.keys(radioConfiguration).length > 0) config.radioConfiguration = { ...radioConfiguration };
+      if (Object.keys(radioConfiguration).length > 0)
+        config.radioConfiguration = { ...radioConfiguration };
     }
     if (instance.type === "du") {
       config.cu_cp = ranNames.get(instance.cuCpId);
@@ -283,14 +307,17 @@ export function buildDeploymentRequest(
     };
     if (!isCots) config.ru = ruNames.get(ue.ruId);
     if (state.nrBand.trim()) config.nrBands = [Number(state.nrBand)];
-    const supi = state.resourceSource !== "custom" && isCots
-      ? providerUes.get(ue.providerUeId)?.imsi ?? ""
-      : ue.supi.trim();
+    const supi =
+      state.resourceSource !== "custom" && isCots
+        ? (providerUes.get(ue.providerUeId)?.imsi ?? "")
+        : ue.supi.trim();
     if (supi) config.supi = supi;
     ueComponents[ue.name.trim()] = { type: ue.type, config };
   }
 
-  const ricComponents = state.ricEnabled ? buildRicComponents(options, state.ricImplementation) : {};
+  const ricComponents = state.ricEnabled
+    ? buildRicComponents(options, state.ricImplementation)
+    : {};
 
   const plan = builderPlacementPlan(state, options, catalogs);
   infrastructure.nodes = applyPlacementRoles(infrastructure.nodes, plan, state.placementMode);
@@ -308,7 +335,10 @@ export function buildDeploymentRequest(
   const coreDeploymentComponents = Object.fromEntries(
     Object.entries(coreComponents).map(([name, component]) => [
       name,
-      deploymentEntry(placementKey("core", name), String(isObject(component) ? component.type : "")),
+      deploymentEntry(
+        placementKey("core", name),
+        String(isObject(component) ? component.type : ""),
+      ),
     ]),
   );
   const ricDeploymentComponents = Object.fromEntries(
@@ -335,10 +365,12 @@ export function buildDeploymentRequest(
   const metamodel: JsonObject = {
     core: { components: coreComponents },
     ran: { components: ranComponents },
-    rus: Object.fromEntries(state.rus.map((ru) => [
-      ru.name.trim(),
-      { type: ru.type, ...(ru.model ? { model: ru.model } : {}) },
-    ])),
+    rus: Object.fromEntries(
+      state.rus.map((ru) => [
+        ru.name.trim(),
+        { type: ru.type, ...(ru.model ? { model: ru.model } : {}) },
+      ]),
+    ),
     ues: ueComponents,
     ric: { components: ricComponents },
   };
@@ -382,35 +414,52 @@ export function buildDeploymentRequest(
  * Non-blocking observations. The models accept these combinations, but they are
  * usually mistakes for a real network.
  */
-export function builderWarnings(state: DeploymentBuilderState, defaults: BuilderModelDefaults): string[] {
+export function builderWarnings(
+  state: DeploymentBuilderState,
+  defaults: BuilderModelDefaults,
+): string[] {
   const warnings: string[] = [];
 
   for (const ru of state.rus) {
     const users = ruUsers(ru.id, state.ranInstances, state.ues);
     const name = ru.name.trim() || "An RU";
     if (users.length === 0) {
-      warnings.push(ru.type === "simulated"
-        ? `${name} is not referenced by any gNB, DU, or UE.`
-        : `${name} is not referenced by any gNB, DU, or UE but will still be provisioned.`);
+      warnings.push(
+        ru.type === "simulated"
+          ? `${name} is not referenced by any gNB, DU, or UE.`
+          : `${name} is not referenced by any gNB, DU, or UE but will still be provisioned.`,
+      );
     } else if (ru.type !== "simulated" && users.length > 1) {
-      warnings.push(`Physical RU ${name} is shared by ${users.join(", ")}. The model allows it, but one radio is normally driven by a single gNB/DU or UE.`);
+      warnings.push(
+        `Physical RU ${name} is shared by ${users.join(", ")}. The model allows it, but one radio is normally driven by a single gNB/DU or UE.`,
+      );
     }
   }
 
-  for (const [field, scope] of Object.entries(IDENTITY_SCOPES) as Array<[IdentityField, string[]]>) {
-    const holders = state.ranInstances.filter((instance) => (
-      scope.includes(instance.type) && (IDENTITY_FIELDS_BY_TYPE[instance.type] ?? []).includes(field)
-    ));
-    for (const [value, names] of groupBy(holders, (instance) => String(effectiveIdentity(instance, field, defaults)))) {
+  for (const [field, scope] of Object.entries(IDENTITY_SCOPES) as Array<
+    [IdentityField, string[]]
+  >) {
+    const holders = state.ranInstances.filter(
+      (instance) =>
+        scope.includes(instance.type) &&
+        (IDENTITY_FIELDS_BY_TYPE[instance.type] ?? []).includes(field),
+    );
+    for (const [value, names] of groupBy(holders, (instance) =>
+      String(effectiveIdentity(instance, field, defaults)),
+    )) {
       if (names.length > 1) {
-        warnings.push(`${IDENTITY_LABELS[field]} ${value} is used by ${names.map((instance) => instance.name.trim()).join(", ")}.`);
+        warnings.push(
+          `${IDENTITY_LABELS[field]} ${value} is used by ${names.map((instance) => instance.name.trim()).join(", ")}.`,
+        );
       }
     }
   }
 
   for (const [supi, ues] of groupBy(state.ues, (ue) => effectiveSupi(ue, defaults))) {
     if (ues.length > 1) {
-      warnings.push(`SUPI ${supi} is used by ${ues.map((ue) => ue.name.trim()).join(", ")}; subscribers are registered per SUPI.`);
+      warnings.push(
+        `SUPI ${supi} is used by ${ues.map((ue) => ue.name.trim()).join(", ")}; subscribers are registered per SUPI.`,
+      );
     }
   }
 
@@ -425,12 +474,14 @@ export function schemaField(
   const definition = schema.$defs?.[definitionName];
   const properties = isObject(definition?.properties) ? definition.properties : undefined;
   const field = isObject(properties?.[propertyName]) ? properties[propertyName] : undefined;
-  return field ? {
-    default: field.default,
-    minimum: typeof field.minimum === "number" ? field.minimum : undefined,
-    maximum: typeof field.maximum === "number" ? field.maximum : undefined,
-    pattern: typeof field.pattern === "string" ? field.pattern : undefined,
-  } : {};
+  return field
+    ? {
+        default: field.default,
+        minimum: typeof field.minimum === "number" ? field.minimum : undefined,
+        maximum: typeof field.maximum === "number" ? field.maximum : undefined,
+        pattern: typeof field.pattern === "string" ? field.pattern : undefined,
+      }
+    : {};
 }
 
 function validateComponentChoices(
@@ -439,8 +490,10 @@ function validateComponentChoices(
   catalogs: ProviderCatalogsResponse,
 ): string[] {
   const errors: string[] = [];
-  if (!options.core.implementations.includes(state.coreImplementation)) errors.push("Choose a valid Core implementation.");
-  if (!options.ran.implementations.includes(state.ranImplementation)) errors.push("Choose a valid RAN implementation.");
+  if (!options.core.implementations.includes(state.coreImplementation))
+    errors.push("Choose a valid Core implementation.");
+  if (!options.ran.implementations.includes(state.ranImplementation))
+    errors.push("Choose a valid RAN implementation.");
   validateSelectedComponentTypes(
     "Core",
     state.coreComponentMode,
@@ -448,7 +501,8 @@ function validateComponentChoices(
     options.core.supported_components[state.coreImplementation] ?? [],
     errors,
   );
-  if (state.ricEnabled && !options.ric.implementations.includes(state.ricImplementation)) errors.push("Choose a valid RIC implementation.");
+  if (state.ricEnabled && !options.ric.implementations.includes(state.ricImplementation))
+    errors.push("Choose a valid RIC implementation.");
 
   errors.push(...validateRus(state, options, catalogs));
   errors.push(...validateRanInstances(state, options));
@@ -464,7 +518,12 @@ function validateRus(
   const errors: string[] = [];
   const isProvider = state.resourceSource !== "custom";
   const inventoryRus = inventoryNames(state.resources, "ru");
-  errors.push(...duplicateNameErrors("RU", state.rus.map((ru) => ru.name.trim())));
+  errors.push(
+    ...duplicateNameErrors(
+      "RU",
+      state.rus.map((ru) => ru.name.trim()),
+    ),
+  );
 
   for (const [index, ru] of state.rus.entries()) {
     const name = ru.name.trim();
@@ -482,7 +541,12 @@ function validateRus(
       else if (/\s/.test(name)) errors.push(`RU name ${name} cannot contain spaces.`);
     } else if (isProvider) {
       const providerRu = catalogs.r2lab.radio_units.find((radio) => radio.id === ru.providerRuId);
-      if (!providerRu || providerRu.type !== ru.type || providerRu.model !== ru.model || providerRu.id !== name) {
+      if (
+        !providerRu ||
+        providerRu.type !== ru.type ||
+        providerRu.model !== ru.model ||
+        providerRu.id !== name
+      ) {
         errors.push(`Choose an R2Lab radio unit from the provider catalog for ${label}.`);
       }
     } else if (!inventoryRus.includes(name)) {
@@ -499,11 +563,13 @@ function validateRanInstances(state: DeploymentBuilderState, options: OptionsRes
   const ruIds = new Set(state.rus.map((ru) => ru.id));
   const names = state.ranInstances.map((instance) => instance.name.trim());
   errors.push(...duplicateNameErrors("RAN component", names));
-  errors.push(...duplicateNameErrors(
-    "RAN component Kubernetes",
-    names.filter(Boolean).map(k8sSafeName),
-    "differ only by case or '_' versus '-'; Helm release names would collide",
-  ));
+  errors.push(
+    ...duplicateNameErrors(
+      "RAN component Kubernetes",
+      names.filter(Boolean).map(k8sSafeName),
+      "differ only by case or '_' versus '-'; Helm release names would collide",
+    ),
+  );
 
   const hasAmf = selectedComponentTypes(
     state.coreComponentMode,
@@ -516,10 +582,14 @@ function validateRanInstances(state: DeploymentBuilderState, options: OptionsRes
     const label = name || `RAN component ${index + 1}`;
     if (!name) errors.push(`Give RAN component ${index + 1} a name.`);
     else if (!COMPONENT_NAME_PATTERN.test(name)) {
-      errors.push(`${name} must use letters, digits, '_' or '-', and start and end with a letter or digit.`);
+      errors.push(
+        `${name} must use letters, digits, '_' or '-', and start and end with a letter or digit.`,
+      );
     }
     if (!supported.includes(instance.type)) {
-      errors.push(`${label}: ${ranTypeLabel(instance.type)} is not supported by the ${state.ranImplementation} RAN.`);
+      errors.push(
+        `${label}: ${ranTypeLabel(instance.type)} is not supported by the ${state.ranImplementation} RAN.`,
+      );
     }
     if (isRadioType(instance.type) && !ruIds.has(instance.ruId)) {
       errors.push(`Choose the RU used by ${label}.`);
@@ -527,19 +597,23 @@ function validateRanInstances(state: DeploymentBuilderState, options: OptionsRes
     if (instance.type === "du") {
       const cuCp = byId.get(instance.cuCpId);
       const cuUp = byId.get(instance.cuUpId);
-      if (!cuCp || !["cu", "cu_cp"].includes(cuCp.type)) errors.push(`Choose the CU or CU-CP that ${label} connects to over F1-C.`);
-      if (!cuUp || !["cu", "cu_up"].includes(cuUp.type)) errors.push(`Choose the CU or CU-UP that ${label} connects to over F1-U.`);
+      if (!cuCp || !["cu", "cu_cp"].includes(cuCp.type))
+        errors.push(`Choose the CU or CU-CP that ${label} connects to over F1-C.`);
+      if (!cuUp || !["cu", "cu_up"].includes(cuUp.type))
+        errors.push(`Choose the CU or CU-UP that ${label} connects to over F1-U.`);
     }
     if (instance.type === "cu_up") {
       const cuCp = byId.get(instance.cuCpId);
-      if (!cuCp || cuCp.type !== "cu_cp") errors.push(`Choose the CU-CP that ${label} connects to over E1.`);
+      if (!cuCp || cuCp.type !== "cu_cp")
+        errors.push(`Choose the CU-CP that ${label} connects to over E1.`);
     }
     if (["gnb", "cu", "cu_cp"].includes(instance.type) && !hasAmf) {
       errors.push(`${label} needs an AMF; include the AMF in the Core functions.`);
     }
     for (const field of IDENTITY_FIELDS_BY_TYPE[instance.type] ?? []) {
       const raw = instance.identity[field]?.trim();
-      if (raw && !/^\d+$/.test(raw)) errors.push(`${IDENTITY_LABELS[field]} of ${label} must be a whole number.`);
+      if (raw && !/^\d+$/.test(raw))
+        errors.push(`${IDENTITY_LABELS[field]} of ${label} must be a whole number.`);
     }
   }
   return errors;
@@ -553,15 +627,25 @@ function validateUes(
   const errors: string[] = [];
   const isProvider = state.resourceSource !== "custom";
   const inventoryUes = inventoryNames(state.resources, "ue");
-  const radioIds = new Set(state.ranInstances.filter((instance) => isRadioType(instance.type)).map((instance) => instance.id));
+  const radioIds = new Set(
+    state.ranInstances
+      .filter((instance) => isRadioType(instance.type))
+      .map((instance) => instance.id),
+  );
   const ruIds = new Set(state.rus.map((ru) => ru.id));
   const names = state.ues.map((ue) => ue.name.trim());
   errors.push(...duplicateNameErrors("UE", names));
-  errors.push(...duplicateNameErrors(
-    "UE Kubernetes",
-    state.ues.filter((ue) => ue.type !== "cots").map((ue) => ue.name).filter((name) => name.trim()).map(k8sSafeName),
-    "differ only by case or '_' versus '-'; Helm release names would collide",
-  ));
+  errors.push(
+    ...duplicateNameErrors(
+      "UE Kubernetes",
+      state.ues
+        .filter((ue) => ue.type !== "cots")
+        .map((ue) => ue.name)
+        .filter((name) => name.trim())
+        .map(k8sSafeName),
+      "differ only by case or '_' versus '-'; Helm release names would collide",
+    ),
+  );
 
   for (const [index, ue] of state.ues.entries()) {
     const name = ue.name.trim();
@@ -572,7 +656,11 @@ function validateUes(
     }
     if (ue.type === "cots") {
       if (isProvider) {
-        if (!catalogs.r2lab.user_equipment.some((candidate) => candidate.id === ue.providerUeId && candidate.id === name)) {
+        if (
+          !catalogs.r2lab.user_equipment.some(
+            (candidate) => candidate.id === ue.providerUeId && candidate.id === name,
+          )
+        ) {
           errors.push(`Choose an R2Lab UE from the provider catalog for ${label}.`);
         }
       } else if (!inventoryUes.includes(name)) {
@@ -581,14 +669,18 @@ function validateUes(
     } else {
       if (!name) errors.push(`Give containerized UE ${index + 1} a name.`);
       else if (!COMPONENT_NAME_PATTERN.test(name)) {
-        errors.push(`${name} must use letters, digits, '_' or '-', and start and end with a letter or digit.`);
+        errors.push(
+          `${name} must use letters, digits, '_' or '-', and start and end with a letter or digit.`,
+        );
       }
-      if (!options.ue.implementations.includes(ue.implementation)) errors.push(`Choose a valid implementation for ${label}.`);
+      if (!options.ue.implementations.includes(ue.implementation))
+        errors.push(`Choose a valid implementation for ${label}.`);
       if (!ruIds.has(ue.ruId)) errors.push(`Choose the RU used by containerized UE ${label}.`);
     }
     // The orchestrator derives UE radio settings from gnbs[0], so at least one is required.
     if (ue.gnbIds.length === 0) errors.push(`Connect ${label} to at least one gNB or DU.`);
-    if (ue.gnbIds.some((id) => !radioIds.has(id))) errors.push(`${label} references a gNB or DU that no longer exists.`);
+    if (ue.gnbIds.some((id) => !radioIds.has(id)))
+      errors.push(`${label} references a gNB or DU that no longer exists.`);
     const supi = ue.supi.trim();
     if (supi && !(isProvider && ue.type === "cots") && !/^[0-9]{15}$/.test(supi)) {
       errors.push(`SUPI of ${label} must be 15 digits.`);
@@ -598,8 +690,9 @@ function validateUes(
 }
 
 export function requiresR2LabHardware(state: DeploymentBuilderState): boolean {
-  return state.resourceSource !== "custom" && (
-    state.rus.some((ru) => ru.type !== "simulated") || state.ues.some((ue) => ue.type === "cots")
+  return (
+    state.resourceSource !== "custom" &&
+    (state.rus.some((ru) => ru.type !== "simulated") || state.ues.some((ue) => ue.type === "cots"))
   );
 }
 
@@ -622,7 +715,9 @@ export function builderPlacementTargets(
   options: OptionsResponse,
 ): PlacementTarget[] {
   const isProvider = state.resourceSource !== "custom";
-  const physicalRuIds = new Set(state.rus.filter((ru) => ru.type !== "simulated").map((ru) => ru.id));
+  const physicalRuIds = new Set(
+    state.rus.filter((ru) => ru.type !== "simulated").map((ru) => ru.id),
+  );
   const needsR2Lab = (ruId: string) => isProvider && physicalRuIds.has(ruId);
 
   const coreComponents = buildSelectedComponents(
@@ -633,29 +728,35 @@ export function builderPlacementTargets(
       options.core.supported_components[state.coreImplementation] ?? [],
     ),
   );
-  const ricComponents = state.ricEnabled ? buildRicComponents(options, state.ricImplementation) : {};
+  const ricComponents = state.ricEnabled
+    ? buildRicComponents(options, state.ricImplementation)
+    : {};
 
   return [
     ...placementTargetsForComponents("core", coreComponents),
-    ...state.ranInstances.map((instance): PlacementTarget => ({
-      key: placementKey("ran", instance.id),
-      name: instance.name.trim(),
-      label: `RAN · ${instance.name.trim() || "(unnamed)"} (${ranTypeLabel(instance.type)})`,
-      category: "ran",
-      type: instance.type,
-      needsR2LabNode: isRadioType(instance.type) && needsR2Lab(instance.ruId),
-    })),
+    ...state.ranInstances.map(
+      (instance): PlacementTarget => ({
+        key: placementKey("ran", instance.id),
+        name: instance.name.trim(),
+        label: `RAN · ${instance.name.trim() || "(unnamed)"} (${ranTypeLabel(instance.type)})`,
+        category: "ran",
+        type: instance.type,
+        needsR2LabNode: isRadioType(instance.type) && needsR2Lab(instance.ruId),
+      }),
+    ),
     ...placementTargetsForComponents("ric", ricComponents),
     ...state.ues
       .filter((ue) => ue.type !== "cots")
-      .map((ue): PlacementTarget => ({
-        key: placementKey("ue", ue.id),
-        name: ue.name.trim(),
-        label: `UE · ${ue.name.trim() || "(unnamed)"} (${ue.type})`,
-        category: "ue",
-        type: ue.type,
-        needsR2LabNode: needsR2Lab(ue.ruId),
-      })),
+      .map(
+        (ue): PlacementTarget => ({
+          key: placementKey("ue", ue.id),
+          name: ue.name.trim(),
+          label: `UE · ${ue.name.trim() || "(unnamed)"} (${ue.type})`,
+          category: "ue",
+          type: ue.type,
+          needsR2LabNode: needsR2Lab(ue.ruId),
+        }),
+      ),
   ];
 }
 
@@ -667,11 +768,15 @@ export function builderPlacementPlan(
 ): PlacementAssignment[] {
   const targets = builderPlacementTargets(state, options);
   if (state.placementMode === "simple") {
-    return targets.map((target) => ({ ...target, node: state.defaultPlacementNode, strategy: "category-role" }));
+    return targets.map((target) => ({
+      ...target,
+      node: state.defaultPlacementNode,
+      strategy: "category-role",
+    }));
   }
 
-  const nodeFor = (target: PlacementTarget) => state.componentPlacements[target.key]
-    ?? defaultNodeForTarget(state, catalogs, target);
+  const nodeFor = (target: PlacementTarget) =>
+    state.componentPlacements[target.key] ?? defaultNodeForTarget(state, catalogs, target);
   const nodesByType = new Map<string, Set<string>>();
   for (const target of targets) {
     const group = `${target.category}:${target.type}`;
@@ -682,7 +787,9 @@ export function builderPlacementPlan(
 
   return targets.map((target) => {
     // UE types (containerized/cots) are not node roles, so UEs are always pinned by node_name.
-    const sharedNode = target.category !== "ue" && (nodesByType.get(`${target.category}:${target.type}`)?.size ?? 0) === 1;
+    const sharedNode =
+      target.category !== "ue" &&
+      (nodesByType.get(`${target.category}:${target.type}`)?.size ?? 0) === 1;
     return {
       ...target,
       node: nodeFor(target),
@@ -701,7 +808,9 @@ export function defaultNodeForTarget(
   const candidates = target.needsR2LabNode
     ? nodes.filter((node) => catalogs.r2lab.required_sophianodes.includes(node))
     : nodes;
-  return candidates.includes(state.defaultPlacementNode) ? state.defaultPlacementNode : candidates[0] ?? "";
+  return candidates.includes(state.defaultPlacementNode)
+    ? state.defaultPlacementNode
+    : (candidates[0] ?? "");
 }
 
 function validateProviderInfrastructure(
@@ -716,8 +825,13 @@ function validateProviderInfrastructure(
   if (state.sophianodeIds.some((id) => !availableIds.has(id))) {
     errors.push("Choose only available SophiaNode servers.");
   }
-  if (needsRadioHost && !state.sophianodeIds.some((id) => catalogs.r2lab.required_sophianodes.includes(id))) {
-    errors.push(`Select at least one of ${catalogs.r2lab.required_sophianodes.join(", ")} for R2Lab radio hardware.`);
+  if (
+    needsRadioHost &&
+    !state.sophianodeIds.some((id) => catalogs.r2lab.required_sophianodes.includes(id))
+  ) {
+    errors.push(
+      `Select at least one of ${catalogs.r2lab.required_sophianodes.join(", ")} for R2Lab radio hardware.`,
+    );
   }
   if (state.biEnabled) {
     const vmNames = state.biVmNames.map((name) => name.trim());
@@ -730,7 +844,7 @@ function validateProviderInfrastructure(
     if (vmNames.some((name) => state.sophianodeIds.includes(name))) {
       errors.push("A BI virtual machine cannot reuse a selected SophiaNode name.");
     }
-    for (const [label, value] of ([
+    for (const [label, value] of [
       ["infrastructure", state.biInfra],
       ["image", state.biImage],
       ["flavor", state.biFlavor],
@@ -738,12 +852,14 @@ function validateProviderInfrastructure(
       ["experiment", state.biExperiment],
       ["experiment duration", state.biExperimentDuration],
       ["node duration", state.biNodeDuration],
-    ] satisfies Array<[string, string]>)) {
+    ] satisfies Array<[string, string]>) {
       if (!value.trim()) errors.push(`Enter the BI ${label}.`);
     }
   }
   if (sophianodeNeedsSlicesUsername(state, catalogs) && !state.slicesUsername.trim()) {
-    errors.push("Enter your SLICES username: the selected SophiaNodes are reached through the POS jump host with it.");
+    errors.push(
+      "Enter your SLICES username: the selected SophiaNodes are reached through the POS jump host with it.",
+    );
   }
   if (state.sophianodeIds.length === 0 && (!state.biEnabled || state.biVmNames.length === 0)) {
     errors.push("Select or define at least one infrastructure node.");
@@ -778,7 +894,6 @@ function buildProviderInfrastructure(
           create_experiment: state.biCreateExperiment,
           experiment_duration: state.biExperimentDuration,
           node_duration: state.biNodeDuration,
-          allow_created: state.biAllowCreated,
         },
       },
     };
@@ -806,15 +921,28 @@ function buildProviderInfrastructure(
   const ues: JsonObject = {};
   for (const ue of state.ues) {
     if (ue.type !== "cots") continue;
-    ues[ue.name.trim()] = { category: "ue", type: "cots", is_provisioned: false, provisioner: "r2lab" };
+    ues[ue.name.trim()] = {
+      category: "ue",
+      type: "cots",
+      is_provisioned: false,
+      provisioner: "r2lab",
+    };
   }
   return { nodes, rus, ues, provisioners };
 }
 
-export function sophianodeNeedsSlicesUsername(state: DeploymentBuilderState, catalogs: ProviderCatalogsResponse): boolean {
-  return state.resourceSource !== "custom" && state.sophianodeIds.some((id) => (
-    catalogs.slices.sophianodes.find((node) => node.id === id)?.ssh?.jumphost?.user_from === "slices_username"
-  ));
+export function sophianodeNeedsSlicesUsername(
+  state: DeploymentBuilderState,
+  catalogs: ProviderCatalogsResponse,
+): boolean {
+  return (
+    state.resourceSource !== "custom" &&
+    state.sophianodeIds.some(
+      (id) =>
+        catalogs.slices.sophianodes.find((node) => node.id === id)?.ssh?.jumphost?.user_from ===
+        "slices_username",
+    )
+  );
 }
 
 function sophianodeSshInfo(
@@ -826,13 +954,15 @@ function sophianodeSshInfo(
     return {
       ssh_info: {
         hostname: node.ssh.hostname,
-        ...(jump ? {
-          jumphost: {
-            hostname: jump.hostname,
-            ...(jump.port ? { port: jump.port } : {}),
-            user: jump.user_from === "slices_username" ? slicesUsername.trim() : jump.user,
-          },
-        } : {}),
+        ...(jump
+          ? {
+              jumphost: {
+                hostname: jump.hostname,
+                ...(jump.port ? { port: jump.port } : {}),
+                user: jump.user_from === "slices_username" ? slicesUsername.trim() : jump.user,
+              },
+            }
+          : {}),
       },
     };
   }
@@ -854,8 +984,8 @@ function validatePlacement(
       errors.push("Choose a default placement node from the selected infrastructure.");
     }
     if (
-      targets.some((target) => target.needsR2LabNode)
-      && !catalogs.r2lab.required_sophianodes.includes(state.defaultPlacementNode)
+      targets.some((target) => target.needsR2LabNode) &&
+      !catalogs.r2lab.required_sophianodes.includes(state.defaultPlacementNode)
     ) {
       errors.push("The default node for R2Lab radio processing must be a compatible SophiaNode.");
     }
@@ -880,18 +1010,22 @@ function applyPlacementRoles(
   plan: PlacementAssignment[],
   mode: DeploymentBuilderState["placementMode"],
 ): JsonObject {
-  const nodes = Object.fromEntries(Object.entries(inputNodes).map(([name, value]) => {
-    const node = isObject(value) ? { ...value } : {};
-    node.roles = Array.isArray(node.roles)
-      ? node.roles.filter((role): role is string => typeof role === "string")
-      : [];
-    return [name, node];
-  }));
+  const nodes = Object.fromEntries(
+    Object.entries(inputNodes).map(([name, value]) => {
+      const node = isObject(value) ? { ...value } : {};
+      node.roles = Array.isArray(node.roles)
+        ? node.roles.filter((role): role is string => typeof role === "string")
+        : [];
+      return [name, node];
+    }),
+  );
 
   if (mode === "explicit") {
     // A type label anywhere else would let force_type_scheduling pick another node.
     const scheduledTypes = new Set(
-      plan.filter((assignment) => assignment.strategy === "type-role").map((assignment) => assignment.type),
+      plan
+        .filter((assignment) => assignment.strategy === "type-role")
+        .map((assignment) => assignment.type),
     );
     for (const node of Object.values(nodes)) {
       if (isObject(node) && Array.isArray(node.roles)) {
@@ -920,14 +1054,16 @@ function placementTargetsForComponents(
 ): PlacementTarget[] {
   return Object.entries(components).flatMap(([name, component]) => {
     if (!isObject(component) || typeof component.type !== "string") return [];
-    return [{
-      key: placementKey(category, name),
-      name,
-      label: `${category.toUpperCase()} · ${name} (${component.type})`,
-      category,
-      type: component.type,
-      needsR2LabNode: false,
-    }];
+    return [
+      {
+        key: placementKey(category, name),
+        name,
+        label: `${category.toUpperCase()} · ${name} (${component.type})`,
+        category,
+        type: component.type,
+        needsR2LabNode: false,
+      },
+    ];
   });
 }
 
@@ -954,10 +1090,14 @@ function buildSelectedComponents(
   defaults: Record<string, ModelComponentDefault>,
   selectedTypes: string[],
 ): JsonObject {
-  return Object.fromEntries(selectedTypes.map((type) => {
-    const defaultEntry = Object.entries(defaults).find(([, component]) => component.type === type);
-    return [defaultEntry?.[0] ?? type, { type }];
-  }));
+  return Object.fromEntries(
+    selectedTypes.map((type) => {
+      const defaultEntry = Object.entries(defaults).find(
+        ([, component]) => component.type === type,
+      );
+      return [defaultEntry?.[0] ?? type, { type }];
+    }),
+  );
 }
 
 function validateSelectedComponentTypes(
@@ -1004,8 +1144,14 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   return groups;
 }
 
-export function inventoryNames(resources: CustomResourceDraft[], kind: CustomResourceDraft["kind"]): string[] {
-  return resources.filter((resource) => resource.kind === kind).map(resourceName).filter(Boolean);
+export function inventoryNames(
+  resources: CustomResourceDraft[],
+  kind: CustomResourceDraft["kind"],
+): string[] {
+  return resources
+    .filter((resource) => resource.kind === kind)
+    .map(resourceName)
+    .filter(Boolean);
 }
 
 function resourceName(resource: CustomResourceDraft): string {
